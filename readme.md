@@ -19,7 +19,7 @@ A user-friendly GUI tool to convert gene identifiers between Ensembl IDs and gen
 
 ## Features
 
-- Simple GUI interface using PySide6
+- Simple GUI interface using PyQt5
 - Deduplication to avoid mapping errors
 - Internal mapping tables included for packaging
 - Compatible with both Apple Silicon and Intel Macs (if packed properly)
@@ -49,7 +49,7 @@ cd GeneConverter
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-pip install pandas PySide6 pyinstaller
+pip install pandas PyQt5 pyinstaller
 ```
 
 ------
@@ -81,6 +81,7 @@ python gene_converter_gui.py
 pyinstaller --windowed --onefile --name GeneConverter \
 --add-data "hg38_table.tsv:." \
 --add-data "mm10_table.tsv:." \
+--icon app.icns
 gene_converter_gui.py
 ```
 
@@ -162,6 +163,7 @@ This happens because:
      pyinstaller --windowed --onedir --name GeneConverter \
        --add-data "hg38_table.tsv:." \
        --add-data "mm10_table.tsv:." \
+       --icon app.icns
        gene_converter_gui.py
      ```
 
