@@ -35,10 +35,11 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['app.icns'],
 )
 app = BUNDLE(
     exe,
     name='GeneConverter.app',
-    icon=None,
+    icon='app.icns',
     bundle_identifier=None,
 )

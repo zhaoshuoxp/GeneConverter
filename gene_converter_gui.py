@@ -2,14 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Gene ID/Symbol Converter GUI v3
---------------------------------
+Gene ID/Symbol Converter GUI (PyQt5 version)
+--------------------------------------------
 Features:
-- Select species: hg38 or mm10
+- Select species: hg38_v43 or mm10_v25
 - Load one input file (CSV/TSV)
 - Preview first 10 rows of the file
 - User manually selects which column to convert
 - Choose conversion direction: ID → Symbol or Symbol → ID
+- Optional "Keep version number" when converting Symbol → ID
 - Optional output folder selection (default: same as input file)
 - Internal mapping tables included for packaging
 - Deduplication ensures map operations do not raise errors
@@ -17,13 +18,14 @@ Features:
 
 import sys
 import os
+import re
 import pandas as pd
-from PySide6.QtWidgets import (
+from PyQt5.QtWidgets import (
     QApplication, QWidget, QPushButton, QFileDialog, QLabel,
     QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QComboBox, QMessageBox
+    QComboBox, QMessageBox, QCheckBox
 )
-from PySide6.QtCore import Qt
+from PyQt5.QtCore import Qt
 
 # -----------------------------
 # Internal resource path handling (for PyInstaller)
@@ -33,7 +35,7 @@ def get_mapping_path(species):
         base_path = sys._MEIPASS
     else:
         base_path = os.path.dirname(__file__)
-    if species == 'hg38':
+    if species == 'hg38_v43':
         return os.path.join(base_path, 'hg38_table.tsv')
     else:
         return os.path.join(base_path, 'mm10_table.tsv')
@@ -47,7 +49,6 @@ class GeneConverterApp(QWidget):
         self.setWindowTitle("Gene ID/Symbol Converter")
         self.resize(800, 600)
         self.df = None
-        self.mapping = None
         self.input_file_path = None
         self.output_folder = None
 
@@ -74,8 +75,8 @@ class GeneConverterApp(QWidget):
         # Species selection
         species_layout = QHBoxLayout()
         self.species_combo = QComboBox()
-        self.species_combo.addItems(['hg38', 'mm10'])
-        species_layout.addWidget(QLabel("Select Species:"))
+        self.species_combo.addItems(['hg38_v43', 'mm10_v25'])
+        species_layout.addWidget(QLabel("Select Genome Build:"))
         species_layout.addWidget(self.species_combo)
         layout.addLayout(species_layout)
 
@@ -93,6 +94,11 @@ class GeneConverterApp(QWidget):
         col_layout.addWidget(QLabel("Conversion Direction:"))
         col_layout.addWidget(self.direction_combo)
         layout.addLayout(col_layout)
+
+        # Keep version option
+        self.keep_version_check = QCheckBox("Keep version number (Symbol → ID only)")
+        self.keep_version_check.setChecked(True)
+        layout.addWidget(self.keep_version_check)
 
         # Convert button
         self.convert_btn = QPushButton("Convert")
@@ -113,7 +119,7 @@ class GeneConverterApp(QWidget):
         self.input_file_path = file_path
         self.file_label.setText(os.path.basename(file_path))
 
-        # Auto-detect separator based on file extension
+        # Auto-detect separator
         sep = ',' if file_path.lower().endswith('.csv') else '\t'
         self.df = pd.read_csv(file_path, sep=sep, dtype=str)
 
@@ -165,26 +171,41 @@ class GeneConverterApp(QWidget):
         mapping_path = get_mapping_path(species)
 
         if not os.path.exists(mapping_path):
-            QMessageBox.warning(self, "Warning", f"Mapping file does not exist: {mapping_path}")
+            QMessageBox.warning(self, "Warning", f"Mapping file not found: {mapping_path}")
             return
 
         # Load mapping table
         mapping = pd.read_csv(mapping_path, sep='\t', header=None, names=['ensembl', 'symbol'], dtype=str)
-        mapping['ensembl'] = mapping['ensembl'].str.split('.').str[0]  # Remove version number
 
-        # Deduplicate to ensure unique index
-        mapping_ensembl_unique = mapping.drop_duplicates(subset='ensembl')
-        mapping_symbol_unique = mapping.drop_duplicates(subset='symbol')
+        # Build lookup dicts
+        mapping_noversion = mapping.copy()
+        mapping_noversion['ensembl_base'] = mapping_noversion['ensembl'].str.replace(r"\.\d+$", "", regex=True)
+
+        id2symbol = mapping_noversion.drop_duplicates(subset="ensembl_base").set_index("ensembl_base")['symbol'].to_dict()
+        symbol2id = mapping.drop_duplicates(subset="symbol").set_index("symbol")['ensembl'].to_dict()
 
         # Copy dataframe to output
         df_out = self.df.copy()
 
         if direction == 'ID → Symbol':
+            def id_to_symbol(val):
+                if pd.isna(val):
+                    return val
+                val_base = re.sub(r"\.\d+$", "", str(val))
+                return id2symbol.get(val, id2symbol.get(val_base, val))
             new_col = col_name + '_symbol'
-            df_out[new_col] = df_out[col_name].map(mapping_ensembl_unique.set_index('ensembl')['symbol']).fillna(df_out[col_name])
-        else:
+            df_out[new_col] = df_out[col_name].map(id_to_symbol)
+        else:  # Symbol → ID
+            keep_version = self.keep_version_check.isChecked()
+            def symbol_to_id(val):
+                if pd.isna(val):
+                    return val
+                ensg = symbol2id.get(str(val), val)
+                if not keep_version:
+                    ensg = re.sub(r"\.\d+$", "", ensg)
+                return ensg
             new_col = col_name + '_ensembl'
-            df_out[new_col] = df_out[col_name].map(mapping_symbol_unique.set_index('symbol')['ensembl']).fillna(df_out[col_name])
+            df_out[new_col] = df_out[col_name].map(symbol_to_id)
 
         # Determine output folder
         output_folder = self.output_folder if self.output_folder else os.path.dirname(self.input_file_path)
@@ -205,4 +226,4 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = GeneConverterApp()
     window.show()
-    sys.exit(app.exec())
+    sys.exit(app.exec_())
