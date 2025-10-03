@@ -163,7 +163,7 @@ This happens because:
      pyinstaller --windowed --onedir --name GeneConverter \
        --add-data "hg38_table.tsv:." \
        --add-data "mm10_table.tsv:." \
-       --icon app.icns
+       --icon app.icns \
        gene_converter_gui.py
      ```
 
