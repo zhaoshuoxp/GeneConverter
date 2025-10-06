@@ -13,7 +13,8 @@ Features:
 - Optional "Keep version number" when converting Symbol → ID
 - Optional output folder selection (default: same as input file)
 - Internal mapping tables included for packaging
-- Deduplication ensures map operations do not raise errors
+- Supports 4-column mapping table: no version | with version | gene name | other names
+- Multiple mappings returned as comma-separated
 """
 
 import sys
@@ -36,9 +37,9 @@ def get_mapping_path(species):
     else:
         base_path = os.path.dirname(__file__)
     if species == 'hg38_v43':
-        return os.path.join(base_path, 'hg38_table.tsv')
+        return os.path.join(base_path, 'hg38_table.csv')
     else:
-        return os.path.join(base_path, 'mm10_table.tsv')
+        return os.path.join(base_path, 'mm10_table.csv')
 
 # -----------------------------
 # Main GUI Window
@@ -174,49 +175,83 @@ class GeneConverterApp(QWidget):
             QMessageBox.warning(self, "Warning", f"Mapping file not found: {mapping_path}")
             return
 
-        # Load mapping table
-        mapping = pd.read_csv(mapping_path, sep='\t', header=None, names=['ensembl', 'symbol'], dtype=str)
+        # -----------------------------
+        # Load 4-column mapping table
+        # -----------------------------
+        mapping = pd.read_csv(mapping_path, sep=',', header=None, dtype=str)
+        mapping.columns = ['col1','col2','col3','col4']
 
-        # Build lookup dicts
-        mapping_noversion = mapping.copy()
-        mapping_noversion['ensembl_base'] = mapping_noversion['ensembl'].str.replace(r"\.\d+$", "", regex=True)
-
-        id2symbol = mapping_noversion.drop_duplicates(subset="ensembl_base").set_index("ensembl_base")['symbol'].to_dict()
-        symbol2id = mapping.drop_duplicates(subset="symbol").set_index("symbol")['ensembl'].to_dict()
-
-        # Copy dataframe to output
+        # ID -> Symbol
+        id2symbol_with_version = mapping.groupby('col2')['col3'].agg(lambda x: ','.join([str(i) for i in x if pd.notna(i)])).to_dict()
+        id2symbol_no_version  = mapping.groupby('col1')['col3'].agg(lambda x: ','.join([str(i) for i in x if pd.notna(i)])).to_dict()
+        
+        # Symbol -> ID
+        symbol2id_col3        = mapping.groupby('col3')['col2'].agg(lambda x: ','.join([str(i) for i in x if pd.notna(i)])).to_dict()
+        symbol2id_col4 = {}
+        for _, row in mapping.iterrows():
+            if pd.notna(row['col4']):
+                for name in str(row['col4']).split(','):
+                    name = name.strip()
+                    if not name:
+                        continue
+                    if name in symbol2id_col4:
+                        symbol2id_col4[name] += ',' + str(row['col2'])
+                    else:
+                        symbol2id_col4[name] = str(row['col2'])
+        # -----------------------------
+        # Conversion functions
+        # -----------------------------
+        def id_to_symbol(val):
+            if pd.isna(val): return val
+            val_str = str(val)
+            if '.' in val_str:
+                res = id2symbol_with_version.get(val_str, id2symbol_no_version.get(val_str.split('.')[0], val_str))
+            else:
+                res = id2symbol_no_version.get(val_str, id2symbol_with_version.get(val_str, val_str))
+            
+            res_list = [x.strip() for x in res.split(',')]
+            res_list = list(dict.fromkeys(res_list))  
+            return ','.join(res_list)
+        
+        def symbol_to_id(val, keep_version=True):
+            if pd.isna(val): return val
+            val_str = str(val)
+            ids = symbol2id_col3.get(val_str)
+            if ids:
+                ids_list = ids.split(',')
+            else:
+                ids = symbol2id_col4.get(val_str)
+                if ids:
+                    ids_list = ids.split(',')
+                else:
+                    return val_str
+            if not keep_version:
+                ids_list = [x.split('.')[0] for x in ids_list]
+            
+            ids_list = [x.strip() for x in ids_list]
+            ids_list = list(dict.fromkeys(ids_list))
+            return ','.join(ids_list)
+        
+        # -----------------------------
+        # Apply conversion
+        # -----------------------------
         df_out = self.df.copy()
+        keep_version = self.keep_version_check.isChecked()
 
         if direction == 'ID → Symbol':
-            def id_to_symbol(val):
-                if pd.isna(val):
-                    return val
-                val_base = re.sub(r"\.\d+$", "", str(val))
-                return id2symbol.get(val, id2symbol.get(val_base, val))
-            new_col = col_name + '_symbol'
-            df_out[new_col] = df_out[col_name].map(id_to_symbol)
-        else:  # Symbol → ID
-            keep_version = self.keep_version_check.isChecked()
-            def symbol_to_id(val):
-                if pd.isna(val):
-                    return val
-                ensg = symbol2id.get(str(val), val)
-                if not keep_version:
-                    ensg = re.sub(r"\.\d+$", "", ensg)
-                return ensg
-            new_col = col_name + '_ensembl'
-            df_out[new_col] = df_out[col_name].map(symbol_to_id)
+            df_out[col_name + '_symbol'] = df_out[col_name].map(id_to_symbol)
+        else:
+            df_out[col_name + '_ensembl'] = df_out[col_name].map(lambda x: symbol_to_id(x, keep_version))
 
-        # Determine output folder
+        # -----------------------------
+        # Save output
+        # -----------------------------
         output_folder = self.output_folder if self.output_folder else os.path.dirname(self.input_file_path)
         base_name = os.path.splitext(os.path.basename(self.input_file_path))[0]
         ext = os.path.splitext(self.input_file_path)[1]
         output_file = os.path.join(output_folder, base_name + '_converted' + ext)
-
-        # Save file
         sep = ',' if ext.lower() == '.csv' else '\t'
         df_out.to_csv(output_file, sep=sep, index=False)
-
         QMessageBox.information(self, "Done", f"Conversion completed.\nOutput file: {output_file}")
 
 # -----------------------------
@@ -227,3 +262,4 @@ if __name__ == '__main__':
     window = GeneConverterApp()
     window.show()
     sys.exit(app.exec_())
+    

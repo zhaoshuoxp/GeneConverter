@@ -5,7 +5,7 @@ a = Analysis(
     ['gene_converter_gui.py'],
     pathex=[],
     binaries=[],
-    datas=[('hg38_table.tsv', '.'), ('mm10_table.tsv', '.')],
+    datas=[('hg38_table.csv', '.'), ('mm10_table.csv', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -19,16 +19,13 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='GeneConverter',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -37,8 +34,17 @@ exe = EXE(
     entitlements_file=None,
     icon=['app.icns'],
 )
-app = BUNDLE(
+coll = COLLECT(
     exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='GeneConverter',
+)
+app = BUNDLE(
+    coll,
     name='GeneConverter.app',
     icon='app.icns',
     bundle_identifier=None,
