@@ -161,8 +161,8 @@ This happens because:
 
      ```
      pyinstaller --windowed --onedir --name GeneConverter \
-       --add-data "hg38_table.tsv:." \
-       --add-data "mm10_table.tsv:." \
+       --add-data "hg38_table.csv:." \
+       --add-data "mm10_table.csv:." \
        --icon app.icns \
        gene_converter_gui.py
      ```
