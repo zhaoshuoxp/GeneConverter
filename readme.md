@@ -1,185 +1,92 @@
 # GeneConverter
 
-**Gene ID/Symbol Converter GUI for macOS**
+一个快速、原生、跨平台的基因 ID / Symbol 转换桌面工具。2.0.1 版本已由 Python + PyQt5/pandas 重构为 Rust + egui，同一套代码可构建 Windows、macOS（Apple Silicon / Intel）和 Linux 应用。
 
-A user-friendly GUI tool to convert gene identifiers between Ensembl IDs and gene symbols. Supports `hg38` and `mm10`.
+## 功能
 
-- Load a CSV/TSV file
-- Preview first 10 rows
-- Select which column to convert
-- Choose conversion direction: ID → Symbol or Symbol → ID
-- Optional output folder (default: same directory as input)
-- Includes internal mapping tables (`hg38_table.tsv`, `mm10_table.tsv`)
+- Ensembl ID → Gene Symbol
+- Gene Symbol / 别名 → Ensembl ID
+- `hg38 / GENCODE v43` 与 `mm10 / GENCODE v25`
+- CSV、TSV、TXT 文件，保留引号、逗号和空值等字段结构
+- 前 10 行数据预览与待转换列选择
+- 可选保留 Ensembl 版本号
+- 多个匹配结果去重后以逗号连接
+- 文件拖放、后台转换、实时进度、取消和覆盖确认
+- 映射表内嵌在应用中；转换完全离线，不上传数据
 
-![GUI](https://raw.githubusercontent.com/zhaoshuoxp/GeneConverter/refs/heads/main//screenshot.png)
+## 为什么重构
 
+旧版本每次转换都会由 pandas 完整加载输入和映射表，并依赖体积较大的 Python/PyQt 运行时。新版本：
 
+- 流式读写输入文件，内存占用不再随输入文件大小线性增长；
+- 映射表按所选物种懒加载，并在后续转换中复用缓存；
+- 发布物是原生可执行程序，无需用户安装 Python；
+- 核心转换逻辑与 GUI 分离，能独立测试，也便于未来增加命令行或新物种。
 
-------
+## 直接运行
 
-## Features
+需要 [Rust stable](https://www.rust-lang.org/tools/install)（最低 1.95）：
 
-- Simple GUI interface using PyQt5
-- Deduplication to avoid mapping errors
-- Internal mapping tables included for packaging
-- Compatible with both Apple Silicon and Intel Macs (if packed properly)
-
-------
-
-## Requirements
-
-- macOS 10.15+
-- Python 3.10+ (Universal2 recommended)
-- Dependencies: `pandas`, `PySide6`, `pyinstaller`
-
-------
-
-## Installation
-
-1. Clone the repository:
-
-```
-git clone https://github.com/yourusername/GeneConverter.git
-cd GeneConverter
+```bash
+cargo run --release
 ```
 
-1. Create a Python virtual environment:
+首次构建会下载 Rust 依赖。映射文件 `hg38_table.csv` 和 `mm10_table.csv` 在编译时嵌入程序。
 
-```
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install pandas PyQt5 pyinstaller
-```
+Linux 构建前需要窗口系统依赖。Ubuntu/Debian：
 
-------
-
-## Usage
-
-Run the GUI:
-
-```
-python gene_converter_gui.py
+```bash
+sudo apt-get update
+sudo apt-get install -y libgtk-3-dev libxkbcommon-dev \
+  libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libssl-dev
 ```
 
-- Click **Select File** to load CSV/TSV
-- Choose species (`hg38` / `mm10`)
-- Preview data and select column
-- Choose conversion direction
-- Optionally select output folder
-- Click **Convert** to generate a new file with converted column
+## 使用
 
-------
+1. 拖入或选择 `.csv`、`.tsv`、`.txt` 文件。
+2. 选择基因组版本、转换方向和源列。
+3. Symbol → ID 时选择是否保留 `.1`、`.2` 等版本后缀。
+4. 需要时选择输出目录，然后点击 **Convert file**。
 
-## Packaging as macOS `.app`
+结果默认写入输入文件同目录，文件名为 `<原文件名>_converted.<扩展名>`。未匹配的值保持原样，新列名为 `<源列>_symbol` 或 `<源列>_ensembl`。
 
-> Make sure to use **Universal2 Python** or Intel Python for cross-Mac compatibility.
+## 测试与构建
 
-### 1. Using PyInstaller:
-
-```
-pyinstaller --windowed --onefile --name GeneConverter \
---add-data "hg38_table.csv:." \
---add-data "mm10_table.csv:." \
---icon app.icns \
-gene_converter_gui.py
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets
+cargo build --release
 ```
 
-- `--windowed` → no terminal window
-- `--onefile` → single executable
-- `--add-data` → include mapping tables
+macOS `.app` 可使用 `cargo-bundle`：
 
-The `.app` will appear in `dist/GeneConverter.app`.
-
-------
-
-### 2. Optional: Verify architecture
-
-```
-file dist/GeneConverter.app/Contents/MacOS/GeneConverter
+```bash
+cargo install cargo-bundle
+cargo bundle --release
 ```
 
-- Apple Silicon only: `Mach-O 64-bit executable arm64`
-- Intel only: `Mach-O 64-bit executable x86_64`
-- Universal2: `Mach-O universal binary with 2 architectures: x86_64, arm64`
+应用位于 `target/release/bundle/osx/GeneConverter.app`。Windows 可执行文件位于 `target/release/gene-converter.exe`，Linux 可执行文件位于 `target/release/gene-converter`。
 
-------
+仓库中的 GitHub Actions 会在四种环境中测试和打包：
 
-### 3. Optional: Create Universal2 `.app`
+- Windows x86_64
+- macOS Apple Silicon
+- macOS Intel
+- Linux x86_64
 
-1. Build arm64 `.app` on Apple Silicon
-2. Build x86_64 `.app` on Intel Mac
-3. Merge using `lipo`:
+推送形如 `v2.0.1` 的 tag 时会自动创建 GitHub Release 并附上四个平台的压缩包。
 
+## 项目结构
+
+```text
+src/lib.rs                  流式转换核心、映射缓存与单元测试
+src/main.rs                 跨平台原生 GUI
+hg38_table.csv              人类基因映射表
+mm10_table.csv              小鼠基因映射表
+.github/workflows/build.yml 三平台持续集成与发布
 ```
-lipo -create -output GeneConverter_universal \
-arm64_bin x86_bin
-cp GeneConverter_universal dist/GeneConverter.app/Contents/MacOS/GeneConverter
-```
-
-- Now the `.app` runs on both Intel and M1/M2 Macs
-
-------
-
-## macOS Gatekeeper Notes ⚠️
-
-When you first open `GeneConverter.app`, macOS may show warnings like:
-
-- **“GeneConverter.app can’t be opened because it is from an unidentified developer.”**
-- **“GeneConverter.app is damaged and can’t be opened.”**
-- Or the app opens but **startup feels very slow**
-
-This happens because:
-
-- PyInstaller `--onefile` apps extract to a temporary folder on every launch
-- Gatekeeper scans the extracted files (slows down startup)
-- Unsigned apps trigger extra verification
-
-### 🔑 Solutions
-
-1. **Run once via right-click**
-
-   - Right-click the app → **Open** → Confirm
-   - After that, macOS will remember your choice
-
-2. **Allow from Security settings**
-
-   - Go to **System Settings → Privacy & Security**
-   - Under *Security*, click **Open Anyway**
-
-3. **Remove quarantine attribute**
-
-   ```
-   xattr -dr com.apple.quarantine dist/GeneConverter.app
-   ```
-
-4. **Speed up startup**
-
-   - Use `--onedir` instead of `--onefile` when building
-
-   - Example:
-
-     ```
-     pyinstaller --windowed --onedir --name GeneConverter \
-       --add-data "hg38_table.csv:." \
-       --add-data "mm10_table.csv:." \
-       --icon app.icns \
-       gene_converter_gui.py
-     ```
-
-   - This avoids temporary extraction and usually starts instantly
-
-5. **(Optional) Code sign & notarize**
-   If you have an Apple Developer ID:
-
-   ```
-   codesign --deep --force --sign "Developer ID Application: Your Name (TeamID)" dist/GeneConverter.app
-   ```
-
-   Then notarize via Apple to fully remove warnings
-
-------
 
 ## License
 
-MIT License
+MIT

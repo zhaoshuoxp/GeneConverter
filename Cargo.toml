@@ -1,0 +1,39 @@
+[package]
+name = "gene-converter"
+version = "2.0.1"
+edition = "2024"
+rust-version = "1.95"
+description = "Fast, native, cross-platform Gene ID/Symbol converter"
+license = "MIT"
+repository = "https://github.com/zhaoshuoxp/GeneConverter"
+
+[dependencies]
+anyhow = "1.0"
+csv = "1.4"
+eframe = { version = "0.36.1", default-features = false, features = [
+    "accesskit",
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+] }
+egui_extras = "0.36.1"
+rfd = { version = "0.17.2", features = ["common-controls-v6"] }
+tempfile = "3.20"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = 3
+panic = "abort"
+strip = true
+
+[package.metadata.bundle]
+name = "GeneConverter"
+identifier = "io.github.zhaoshuoxp.geneconverter"
+icon = ["app.icns"]
+version = "2.0.1"
+copyright = "Copyright (c) GeneConverter contributors"
+category = "public.app-category.education"
+short_description = "Convert Ensembl gene IDs and gene symbols"
+long_description = "A fast native desktop tool for converting Ensembl gene identifiers and gene symbols in CSV and TSV files."
