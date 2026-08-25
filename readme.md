@@ -16,14 +16,6 @@ GeneConverter is a fast, native, cross-platform desktop application for converti
 - Drag and drop files, select an output folder, track progress, cancel a conversion, and confirm overwrites.
 - Work completely offline: mapping tables are embedded in the application and no data leaves your computer.
 
-## Why Rust?
-
-The original Python application loaded entire input files and mapping tables through pandas and required the Python, PyQt, and pandas runtimes. The Rust version:
-
-- streams input and output so memory usage does not grow linearly with file size;
-- loads the selected organism's mapping table lazily and reuses it for later conversions;
-- ships as a native application with no Python installation required; and
-- separates the conversion engine from the GUI for independent testing and future extensions.
 
 ## Run from Source
 
