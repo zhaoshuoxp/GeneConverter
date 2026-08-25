@@ -16,6 +16,15 @@ GeneConverter is a fast, native, cross-platform desktop application for converti
 - Drag and drop files, select an output folder, track progress, cancel a conversion, and confirm overwrites.
 - Work completely offline: mapping tables are embedded in the application and no data leaves your computer.
 
+## Opening an unsigned macOS build
+
+Release artifacts are unsigned unless the repository's Apple signing secrets are configured. If macOS blocks the application after you have downloaded it from this repository's GitHub Releases page and verified its checksum, move the application to /Applications, then remove its quarantine attribute:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/GeneConverter.app"
+```
+Only run this command for an application whose source you trust. It recursively removes the Gatekeeper quarantine attribute from that application bundle.
+
 
 ## Run from Source
 
